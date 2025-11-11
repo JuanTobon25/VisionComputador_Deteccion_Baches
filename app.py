@@ -5,7 +5,8 @@ import io
 import numpy as np
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
-import json
+import kaggle
+import tempfile
 
 # -------------------------------------------------------
 # ⚙️ CONFIGURACIÓN DE LA APP
@@ -16,49 +17,53 @@ st.title("🕳️ Clasificador de Baches con IA")
 st.write("Sube una imagen y el modelo la clasificará automáticamente como **Con bache** o **Sin bache**.")
 
 # -------------------------------------------------------
-# ⚙️ CONFIGURACIÓN DE KAGGLE (desde secretos de Streamlit)
+# ⚙️ AUTENTICACIÓN CON KAGGLE DESDE st.secrets
 # -------------------------------------------------------
 try:
-    os.makedirs("/root/.kaggle", exist_ok=True)
-    with open("/root/.kaggle/kaggle.json", "w") as f:
-        json.dump({
-            "username": st.secrets["KAGGLE_USERNAME"],
-            "key": st.secrets["KAGGLE_KEY"]
-        }, f)
-    os.chmod("/root/.kaggle/kaggle.json", 600)
-    st.info("🔐 Autenticación con Kaggle configurada correctamente.")
+    os.environ["KAGGLE_USERNAME"] = st.secrets["KAGGLE_USERNAME"]
+    os.environ["KAGGLE_KEY"] = st.secrets["KAGGLE_KEY"]
+    st.success("🔐 Autenticación con Kaggle configurada correctamente.")
 except Exception as e:
-    st.warning(f"⚠️ No se configuró la autenticación de Kaggle: {e}")
+    st.error(f"⚠️ No se encontraron las credenciales de Kaggle en `st.secrets`: {e}")
+    st.stop()
 
 # -------------------------------------------------------
-# ⚙️ DESCARGA DIRECTA DEL MODELO DESDE KAGGLE
+# ⚙️ DESCARGA DEL MODELO DESDE KAGGLE
 # -------------------------------------------------------
 DATASET_NAME = "juanjostobnvargas/cnn-baches"
-MODEL_DIR = "modelo"
-MODEL_PATH = os.path.join(MODEL_DIR, "modelo_entrenado.h5")
 
-st.info("📦 Descargando modelo desde Kaggle...")
-os.makedirs(MODEL_DIR, exist_ok=True)
+with tempfile.TemporaryDirectory() as tmp_dir:
+    st.info("📦 Descargando modelo desde Kaggle...")
+    os.system(f"kaggle datasets download -d {DATASET_NAME} -p {tmp_dir}")
 
-# Descargar y descomprimir el modelo desde Kaggle
-os.system(f"kaggle datasets download -d {DATASET_NAME} -p {MODEL_DIR}")
+    # Buscar el zip descargado y extraerlo
+    for file in os.listdir(tmp_dir):
+        if file.endswith(".zip"):
+            with zipfile.ZipFile(os.path.join(tmp_dir, file), "r") as zip_ref:
+                zip_ref.extractall(tmp_dir)
+            os.remove(os.path.join(tmp_dir, file))
 
-# Buscar el zip descargado y extraerlo
-for file in os.listdir(MODEL_DIR):
-    if file.endswith(".zip"):
-        with zipfile.ZipFile(os.path.join(MODEL_DIR, file), "r") as zip_ref:
-            zip_ref.extractall(MODEL_DIR)
-        os.remove(os.path.join(MODEL_DIR, file))
+    # Localizar el archivo del modelo
+    model_path = None
+    for root, _, files in os.walk(tmp_dir):
+        for f in files:
+            if f.endswith(".h5"):
+                model_path = os.path.join(root, f)
+                break
 
-# -------------------------------------------------------
-# ⚙️ CARGA DEL MODELO
-# -------------------------------------------------------
-try:
-    model = load_model(MODEL_PATH)
-    st.success("✅ Modelo cargado correctamente.")
-except Exception as e:
-    st.error(f"❌ Error al cargar el modelo: {e}")
-    st.stop()
+    if not model_path:
+        st.error("❌ No se encontró el archivo del modelo en el dataset.")
+        st.stop()
+
+    # -------------------------------------------------------
+    # ⚙️ CARGA DEL MODELO
+    # -------------------------------------------------------
+    try:
+        model = load_model(model_path)
+        st.success("✅ Modelo cargado correctamente.")
+    except Exception as e:
+        st.error(f"❌ Error al cargar el modelo: {e}")
+        st.stop()
 
 # -------------------------------------------------------
 # 🧩 SUBIDA DE IMAGEN
@@ -67,7 +72,7 @@ uploaded_file = st.file_uploader("📸 Sube una imagen", type=["jpg", "jpeg", "p
 
 if uploaded_file is not None:
     try:
-        # Cargar y procesar la imagen
+        # Cargar y procesar la imagen a (128,128)
         img = image.load_img(io.BytesIO(uploaded_file.read()), target_size=(128, 128))
         img_array = np.expand_dims(image.img_to_array(img) / 255.0, axis=0)
 
@@ -93,3 +98,4 @@ if uploaded_file is not None:
 
     except Exception as e:
         st.error(f"⚠️ Error procesando la imagen: {e}")
+
