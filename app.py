@@ -1,79 +1,100 @@
 import streamlit as st
+import os
+import zipfile
+import io
+import numpy as np
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
-import numpy as np
-import io
-import os
+import json
 
-# ============================================================
-# ⚙️ CONFIGURACIÓN INICIAL
-# ============================================================
-st.set_page_config(page_title="Detección de Baches con IA", page_icon="🚧", layout="centered")
+# -------------------------------------------------------
+# ⚙️ CONFIGURACIÓN DE LA APP
+# -------------------------------------------------------
+st.set_page_config(page_title="Clasificador de Baches", page_icon="🕳️", layout="centered")
 
-st.title("🚗 Detección de Baches con Inteligencia Artificial")
-st.write("Sube una imagen de una carretera y el modelo determinará si tiene **baches** o está **en buen estado**.")
+st.title("🕳️ Clasificador de Baches con IA")
+st.write("Sube una imagen y el modelo la clasificará automáticamente como **Con bache** o **Sin bache**.")
 
-# ============================================================
-# 💾 CARGA DEL MODELO
-# ============================================================
-MODEL_PATH = "modelo/modelo_entrenado.h5"
+# -------------------------------------------------------
+# ⚙️ CONFIGURACIÓN DE KAGGLE (desde secretos de Streamlit)
+# -------------------------------------------------------
+try:
+    os.makedirs("/root/.kaggle", exist_ok=True)
+    with open("/root/.kaggle/kaggle.json", "w") as f:
+        json.dump({
+            "username": st.secrets["KAGGLE_USERNAME"],
+            "key": st.secrets["KAGGLE_KEY"]
+        }, f)
+    os.chmod("/root/.kaggle/kaggle.json", 600)
+    st.info("🔐 Autenticación con Kaggle configurada correctamente.")
+except Exception as e:
+    st.warning(f"⚠️ No se configuró la autenticación de Kaggle: {e}")
+
+# -------------------------------------------------------
+# ⚙️ DESCARGA DIRECTA DEL MODELO DESDE KAGGLE
+# -------------------------------------------------------
+DATASET_NAME = "juanjostobnvargas/cnn-baches"
+MODEL_DIR = "modelo"
+MODEL_PATH = os.path.join(MODEL_DIR, "modelo_entrenado.h5")
+
+os.makedirs(MODEL_DIR, exist_ok=True)
 
 if not os.path.exists(MODEL_PATH):
-    st.error("❌ No se encontró el modelo en la carpeta `modelo/`. Verifica la ruta o el nombre del archivo.")
-    st.stop()
+    st.info("📦 Descargando modelo desde Kaggle...")
+    os.system(f"kaggle datasets download -d {DATASET_NAME} -p {MODEL_DIR}")
 
+    # Buscar el zip descargado y extraerlo
+    for file in os.listdir(MODEL_DIR):
+        if file.endswith(".zip"):
+            with zipfile.ZipFile(os.path.join(MODEL_DIR, file), "r") as zip_ref:
+                zip_ref.extractall(MODEL_DIR)
+            os.remove(os.path.join(MODEL_DIR, file))
+    st.success("✅ Modelo descargado y extraído correctamente.")
+else:
+    st.info("📂 Modelo encontrado localmente, no es necesario descargarlo.")
+
+# -------------------------------------------------------
+# ⚙️ CARGA DEL MODELO
+# -------------------------------------------------------
 try:
     model = load_model(MODEL_PATH)
-    st.success(f"✅ Modelo cargado correctamente desde `{MODEL_PATH}`")
+    st.success("✅ Modelo cargado correctamente.")
 except Exception as e:
-    st.error(f"⚠️ Error al cargar el modelo: {e}")
+    st.error(f"❌ Error al cargar el modelo: {e}")
     st.stop()
 
-# ============================================================
-# 🏷️ NOMBRES DE CLASES
-# ============================================================
-# 0 = sin baches, 1 = con baches
-class_names = {0: "✅ Sin baches", 1: "🚧 Con baches"}
-
-# ============================================================
-# 🖼️ SUBIDA DE IMAGEN
-# ============================================================
+# -------------------------------------------------------
+# 🧩 SUBIDA DE IMAGEN
+# -------------------------------------------------------
 uploaded_file = st.file_uploader("📸 Sube una imagen", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
     try:
-        # Leer imagen sin perder calidad
-        img_bytes = uploaded_file.read()
-        img = image.load_img(io.BytesIO(img_bytes), target_size=(128, 128))
-        img_array = np.expand_dims(image.img_to_array(img) / 255.0, axis=0)
+        # Asegurar tamaño correcto (128x128)
+        img = image.load_img(io.BytesIO(uploaded_file.read()), target_size=(128, 128))
+        img_array = np.expand_dims(image.img_to_array(img).astype("float32") / 255.0, axis=0)
 
-        # Mostrar imagen centrada y más pequeña
+        # Mostrar imagen centrada y en tamaño moderado
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            st.image(img, caption="🖼️ Imagen cargada", width=250)
+            st.image(img, caption="🖼️ Imagen cargada (128x128)", width=220)
 
-        # ============================================================
-        # 🔍 PREDICCIÓN
-        # ============================================================
-        with st.spinner("🤖 Analizando la imagen..."):
-            pred = model.predict(img_array)
-            prob = float(pred[0][0])
+        # -------------------------------------------------------
+        # 🧠 PREDICCIÓN
+        # -------------------------------------------------------
+        with st.spinner("🔍 Clasificando..."):
+            pred = float(model.predict(img_array)[0][0])
 
-        # ============================================================
-        # 🧠 INTERPRETACIÓN
-        # ============================================================
-        label = 1 if prob > 0.5 else 0
-        class_name = class_names[label]
-
-        # ============================================================
-        # 📊 RESULTADOS
-        # ============================================================
-        st.subheader("📈 Resultado de la Predicción")
-        if label == 1:
-            st.error(f"{class_name} (probabilidad: {prob:.4f})")
+        # -------------------------------------------------------
+        # 📊 RESULTADO
+        # -------------------------------------------------------
+        st.subheader("📊 Resultado de la Predicción")
+        if pred > 0.5:
+            st.success(f"🚧 **Con bache** (confianza: {pred:.2f})")
         else:
-            st.success(f"{class_name} (probabilidad: {prob:.4f})")
+            st.info(f"🛣️ **Sin bache** (confianza: {1 - pred:.2f})")
 
     except Exception as e:
         st.error(f"⚠️ Error procesando la imagen: {e}")
+
 
