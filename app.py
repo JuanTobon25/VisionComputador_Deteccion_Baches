@@ -41,7 +41,7 @@ uploaded_file = st.file_uploader("📸 Sube una imagen", type=["jpg", "jpeg", "p
 if uploaded_file is not None:
     try:
         # Leer y procesar la imagen
-        img = image.load_img(io.BytesIO(uploaded_file.read()), target_size=(224, 224))
+        img = image.load_img(io.BytesIO(uploaded_file.read()), target_size=(64, 64))
         img_array = np.expand_dims(image.img_to_array(img) / 255.0, axis=0)
 
         st.image(img, caption="🖼️ Imagen cargada", use_column_width=True)
