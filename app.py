@@ -5,7 +5,7 @@ import numpy as np
 import io
 
 # 📦 Cargar el modelo
-model = load_model("modelo/modelo_entrenado.h5")
+model = load_model("modelo/modelo_entrenado.keras")
 
 st.title("🚀 Clasificador de imágenes con IA")
 
