@@ -5,74 +5,75 @@ import numpy as np
 import io
 import os
 
-# ---------------------------
-# 🔹 CONFIGURACIÓN INICIAL
-# ---------------------------
-st.set_page_config(page_title="Clasificador de Imágenes con IA", page_icon="🚀", layout="centered")
+# ============================================================
+# ⚙️ CONFIGURACIÓN INICIAL
+# ============================================================
+st.set_page_config(page_title="Detección de Baches con IA", page_icon="🚧", layout="centered")
 
-st.title("🚀 Clasificador de Imágenes con IA")
-st.write("Sube una imagen y el modelo la clasificará automáticamente.")
+st.title("🚗 Detección de Baches con Inteligencia Artificial")
+st.write("Sube una imagen de una carretera y el modelo determinará si tiene **baches** o está **en buen estado**.")
 
-# ---------------------------
-# 🔹 CARGA DEL MODELO
-# ---------------------------
-MODEL_PATH_KERAS = "modelo/modelo_entrenado.keras"
-MODEL_PATH_H5 = "modelo/modelo_entrenado.h5"
+# ============================================================
+# 💾 CARGA DEL MODELO
+# ============================================================
+MODEL_PATH = "modelo/modelo_entrenado.h5"
 
-# Verificar qué formato existe
-if os.path.exists(MODEL_PATH_H5):
-    model_path = MODEL_PATH_H5
-else:
-    st.error("❌ No se encontró el modelo en la carpeta 'modelo/'. Verifica la ruta o el nombre del archivo.")
+if not os.path.exists(MODEL_PATH):
+    st.error("❌ No se encontró el modelo en la carpeta `modelo/`. Verifica la ruta o el nombre del archivo.")
     st.stop()
 
 try:
-    model = load_model(model_path)
-    st.success(f"✅ Modelo cargado correctamente desde `{model_path}`")
+    model = load_model(MODEL_PATH)
+    st.success(f"✅ Modelo cargado correctamente desde `{MODEL_PATH}`")
 except Exception as e:
     st.error(f"⚠️ Error al cargar el modelo: {e}")
     st.stop()
 
-# ---------------------------
-# 🔹 NOMBRES DE CLASES
-# ---------------------------
-# 🔸 Cambia esta lista por las clases reales de tu dataset:
-class_names = ["bache", "normal"]
+# ============================================================
+# 🏷️ NOMBRES DE CLASES
+# ============================================================
+# 0 = sin baches, 1 = con baches
+class_names = {0: "✅ Sin baches", 1: "🚧 Con baches"}
 
-# ---------------------------
-# 🔹 SUBIDA DE IMAGEN
-# ---------------------------
+# ============================================================
+# 🖼️ SUBIDA DE IMAGEN
+# ============================================================
 uploaded_file = st.file_uploader("📸 Sube una imagen", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
     try:
-        # Leer y procesar la imagen
-        img = image.load_img(io.BytesIO(uploaded_file.read()), target_size=(64, 64))
+        # Leer imagen sin perder calidad
+        img_bytes = uploaded_file.read()
+        img = image.load_img(io.BytesIO(img_bytes), target_size=(128, 128))
         img_array = np.expand_dims(image.img_to_array(img) / 255.0, axis=0)
 
         # Mostrar imagen centrada y más pequeña
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            st.image(img, caption="🖼️ Imagen cargada", width=200)
+            st.image(img, caption="🖼️ Imagen cargada", width=250)
 
-        # ---------------------------
-        # 🔹 PREDICCIÓN
-        # ---------------------------
-        with st.spinner("🔍 Clasificando la imagen..."):
+        # ============================================================
+        # 🔍 PREDICCIÓN
+        # ============================================================
+        with st.spinner("🤖 Analizando la imagen..."):
             pred = model.predict(img_array)
+            prob = float(pred[0][0])
 
-        pred_label = np.argmax(pred, axis=1)[0]
-        class_name = class_names[pred_label] if pred_label < len(class_names) else "Desconocida"
+        # ============================================================
+        # 🧠 INTERPRETACIÓN
+        # ============================================================
+        label = 1 if prob > 0.5 else 0
+        class_name = class_names[label]
 
-        # ---------------------------
-        # 🔹 RESULTADOS
-        # ---------------------------
-        st.subheader("📊 Resultado de la Predicción")
-        st.success(f"**Clase predicha:** {class_name}")
-        st.write(f"**Etiqueta (índice):** {pred_label}")
-        st.write("**Probabilidades:**")
-        for i, prob in enumerate(pred[0]):
-            st.write(f"- {class_names[i]}: {prob:.4f}")
+        # ============================================================
+        # 📊 RESULTADOS
+        # ============================================================
+        st.subheader("📈 Resultado de la Predicción")
+        if label == 1:
+            st.error(f"{class_name} (probabilidad: {prob:.4f})")
+        else:
+            st.success(f"{class_name} (probabilidad: {prob:.4f})")
 
     except Exception as e:
         st.error(f"⚠️ Error procesando la imagen: {e}")
+
