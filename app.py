@@ -20,9 +20,7 @@ MODEL_PATH_KERAS = "modelo/modelo_entrenado.keras"
 MODEL_PATH_H5 = "modelo/modelo_entrenado.h5"
 
 # Verificar qué formato de modelo existe
-if os.path.exists(MODEL_PATH_KERAS):
-    model_path = MODEL_PATH_KERAS
-elif os.path.exists(MODEL_PATH_H5):
+if os.path.exists(MODEL_PATH_H5):
     model_path = MODEL_PATH_H5
 else:
     st.error("❌ No se encontró el modelo en la carpeta 'modelo/'. Verifica la ruta o el nombre del archivo.")
